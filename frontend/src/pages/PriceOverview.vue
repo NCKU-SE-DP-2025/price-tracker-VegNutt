@@ -9,49 +9,30 @@
     </div>
 </template>
 
-<script>
+<script setup>
+import { computed, onMounted } from 'vue';
 import CategoryPrice from '@/components/CategoryPrice.vue';
 import Categories from '@/constants/categories';
 import { usePricesStore } from '@/stores/prices';
 
-export default {
-    name: 'PriceOverview',
-    data() {
-        return {
-            prices: {},
-        };
-    },
-    components: {
-        CategoryPrice
-    },
-    computed: {
-        categoryList() {
-            return Object.keys(Categories);
-        },
-        isLoading(){
-            const store = usePricesStore();
-            return store.isLoading;
-        },
-        errorMessage(){
-            const store = usePricesStore();
-            return store.errorMessage;
-        },
-        updateTime(){
-            const store = usePricesStore();
-            return store.updatedTime;
-        }
-    },
-    methods:{
-        getPriceData(category){
-            const store = usePricesStore();
-            return store.getPricesByCategory(category);
-        }    
-    },
-    created() {
-        const store = usePricesStore();
-        store.fetchPrices();
-    }
-};
+// store
+const pricesStore = usePricesStore();
+
+// lifecycle
+onMounted(() => {
+  pricesStore.fetchPrices();
+});
+
+// computed
+const categoryList = computed(() => Object.keys(Categories));
+const isLoading = computed(() => pricesStore.isLoading);
+const errorMessage = computed(() => pricesStore.errorMessage);
+const updateTime = computed(() => pricesStore.updatedTime);
+
+// methods
+function getPriceData(category) {
+  return pricesStore.getPricesByCategory(category);
+}
 </script>
 
 <style scoped>
