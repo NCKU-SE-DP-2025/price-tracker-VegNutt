@@ -19,46 +19,56 @@
             <i class="bi bi-fire" :class="{'fire-upvoted': news.is_upvoted}"></i>
             <span>{{ news.upvotes }}</span>
         </div>
-
     </div>
 </template>
 
-<script>
-import { useAuthStore } from '@/stores/auth';
-import { useNewsStore } from '@/stores/news';
-export default {
-    props: {
-        news: {
-            type: Object,
-            required: true
-        }
-    },
-    computed: {
-        hasDetails() {
-            return this.news.reason && this.news.summary;
-        },
-        shortContent() {
-            return this.news.content.length > 200 ? this.news.content.substr(0, 200) + '...' : this.news.content;
-        },
-        isLoggedIn(){
-            const userStore = useAuthStore();
-            return userStore.isLoggedIn;
-        }
-    },
-    methods:{
-        showDialog(){
-            this.$emit('show-dialog');
-        },
-        fetchSummary(){
-            if(this.isLoading) return;
-            this.isLoading = true;
-            this.$emit('fetch-summary');
-        },
-        toggleUpvote(newsId){
-            useNewsStore().toggleUpvote(newsId);
-        }
-    }
-};
+<script setup>
+import { computed, ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useNewsStore } from '@/stores/news'
+
+// 解構 props
+const { news } = defineProps({
+  news: {
+    type: Object,
+    required: true
+  }
+})
+
+// emits
+const emit = defineEmits(['show-dialog', 'fetch-summary'])
+
+// store
+const userStore = useAuthStore()
+const newsStore = useNewsStore()
+
+// local state
+const isLoading = ref(false)
+
+// computed
+const hasDetails = computed(() => news.reason && news.summary)
+
+const shortContent = computed(() => {
+  if (!news.content) return ''
+  return news.content.length > 200 ? news.content.substr(0, 200) + '...' : news.content
+})
+
+const isLoggedIn = computed(() => userStore.isLoggedIn)
+
+// methods
+function showDialog() {
+  emit('show-dialog')
+}
+
+function fetchSummary() {
+  if (isLoading.value) return
+  isLoading.value = true
+  emit('fetch-summary')
+}
+
+function toggleUpvote(newsId) {
+  newsStore.toggleUpvote(newsId)
+}
 </script>
 
 <style scoped>

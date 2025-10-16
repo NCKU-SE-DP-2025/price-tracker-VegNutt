@@ -22,49 +22,53 @@
     </div>
 </template>
 
-<script>
-import Categories from '@/constants/categories';
+<script setup>
+import { computed, toRefs } from 'vue'
+import Categories from '@/constants/categories'
 
-export default {
-    props: {
-        category: {
-            type: String,
-            required: true
-        },
-        priceData: {
-            type: Array,
-            required: true
-        },
-        isLoading: {
-            type: Boolean,
-            required: true
-        },
-        errorMessage: {
-            type: String,
-            required: false
-        },
-    },
-    computed: {
-        categoryName() {
-            return Categories[this.category];
-        },
-        latestDataTime(){
-            let timeTmp = this.priceData[0].時間終點.split('-');
-            return timeTmp[0] + '.' + timeTmp[1];
-        }
-    },
-    methods: {
-        latestPrice(prices_str) {
-            let number = prices_str.split(',').map(Number);
-            let i = number.length - 1;
-            while (i >= 0 && number[i]==0) {
-                i--;
-            }
-            return i==-1 ? "-" : number[i];
-        }
-    }
-};
+// props
+const props = defineProps({
+  category: {
+    type: String,
+    required: true
+  },
+  priceData: {
+    type: Array,
+    required: true
+  },
+  isLoading: {
+    type: Boolean,
+    required: true
+  },
+  errorMessage: {
+    type: String,
+    required: false
+  }
+})
+
+// 將 props 解構成 ref
+const { category, priceData } = toRefs(props)
+
+// computed
+const categoryName = computed(() => Categories[category.value])
+
+const latestDataTime = computed(() => {
+  if (!priceData.value.length) return ''
+  const timeTmp = priceData.value[0].時間終點.split('-')
+  return `${timeTmp[0]}.${timeTmp[1]}`
+})
+
+// methods
+function latestPrice(prices_str) {
+  const numbers = prices_str.split(',').map(Number)
+  let i = numbers.length - 1
+  while (i >= 0 && numbers[i] === 0) {
+    i--
+  }
+  return i === -1 ? '-' : numbers[i]
+}
 </script>
+
 
 <style scoped>
 .error {

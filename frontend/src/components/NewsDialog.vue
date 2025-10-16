@@ -5,38 +5,41 @@
             <div class="content">
                 <h2>{{ news.title }}</h2>
                 <p class="time">{{ news.time }}</p>
-                <p>原文連結：<a :href="news.url" target="_blank">{{news.url}}</a></p>
-                <p v-for="paragraph, index in formattedContent" :key="index">{{ paragraph }}</p>
+                <p>原文連結：<a :href="news.url" target="_blank">{{ news.url }}</a></p>
+                <p v-for="(paragraph, index) in formattedContent" :key="index">{{ paragraph }}</p>
             </div>
-
         </div>
     </div>
 </template>
 
-<script>
-export default {
-    props: {
-        news: {
-            type: Object,
-            required: true
-        },
-        visible: {
-            type: Boolean,
-            default: false
-        }
-    },
-    methods: {
-        close() {
-            this.$emit('update:visible', false);
-        }
-    },
-    computed:{
-        formattedContent() {
-            if(!this.news.content) return '';
-            return this.news.content.split('\r\n');
-        }
-    }
-};
+<script setup>
+import { computed } from 'vue'
+
+// 解構 props
+const { news, visible } = defineProps({
+  news: {
+    type: Object,
+    required: true
+  },
+  visible: {
+    type: Boolean,
+    default: false
+  }
+})
+
+// emits
+const emit = defineEmits(['update:visible'])
+
+// methods
+function close() {
+  emit('update:visible', false)
+}
+
+// computed
+const formattedContent = computed(() => {
+  if (!news.content) return []
+  return news.content.split('\r\n')
+})
 </script>
 
 <style scoped>
@@ -48,7 +51,6 @@ export default {
     height: 90%;
     transform: translate(-50%, -50%);
     background: white;
-    padding: 20px;
     border-radius: 8px;
     padding: 3em 4em;
 }

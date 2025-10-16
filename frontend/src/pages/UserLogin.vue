@@ -15,30 +15,36 @@
     </div>
 </template>
 
-<script>
+<script setup>
+import { ref, computed } from 'vue';
 import { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
 
-export default {
-    data() {
-        return {
-            username: '',
-            password: ''
-        };
-    },
-    methods: {
-        login() {
-            const userStore = useAuthStore();
-            userStore.login(this.username, this.password);
-        }
-    },
-    computed: {
-        loginError(){
-            const userStore = useAuthStore();
-            return userStore.getLoginError;
-        }
-    }
+// store
+const userStore = useAuthStore();
+const router = useRouter();
+
+// local state
+const username = ref('');
+const password = ref('');
+
+// computed
+const loginError = computed(() => userStore.getLoginError);
+
+// methods
+function login() {
+  userStore.login(username.value, password.value)
+    .then(() => {
+      // 登入成功後跳轉到 overview
+      router.push('/overview');
+    })
+    .catch(err => {
+      // 可選：處理錯誤
+      console.error(err);
+    });
 }
 </script>
+
 
 <style scoped>
 .login-page {

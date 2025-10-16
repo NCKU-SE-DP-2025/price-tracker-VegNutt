@@ -48,7 +48,9 @@ Use the navigation bar to explore features like price trend analysis, news brows
 Go to http://localhost:8000/docs to access the backend documents.
 
 ### License
-This project is licensed under the MIT License. See the [LICENSE](https://github.com/NCKU-SE-DP/price-tracker/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/NCKU-SE-DP/price-tracker/blob/main/LICENSE) file for details. 
 
+### Very Sad!!!
+I couldn't find the "develop" in base branch at first. So I merge feature/rwd and develop locally. After that , github says that develop and feature/rwd are identical, making it technically impossible to work with pr. 
 
 
