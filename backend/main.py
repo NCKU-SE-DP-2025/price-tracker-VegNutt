@@ -15,11 +15,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from pydantic import BaseModel, Field, AnyHttpUrl
-from sqlalchemy import (Column, ForeignKey, Integer, String, Table, Text,
-                        create_engine)
+from sqlalchemy import Column, ForeignKey, Integer, String, Table, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
-
 Base = declarative_base()
 
 
@@ -58,7 +56,7 @@ class NewsArticle(Base):
     reason = Column(Text, nullable=False)
     upvoted_by_users = relationship(
         "User", secondary=user_news_association_table, back_populates="upvoted_news"
-    )
+)
 
 
 engine = create_engine("sqlite:///news_database.db", echo=True)
@@ -74,7 +72,7 @@ sentry_sdk.init(
 )
 
 app = FastAPI()
-bgs = BackgroundScheduler()
+scheduler = BackgroundScheduler()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app.add_middleware(
@@ -127,26 +125,28 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 
-def add_new(news_data):
+def add_article_to_db(news_data):
     """
     add new to db
     :param news_data: news info
     :return:
     """
-    session = Session()
-    session.add(NewsArticle(
-        url=news_data["url"],
-        title=news_data["title"],
-        time=news_data["time"],
-        content=" ".join(news_data["content"]),  # 將內容list轉換為字串
-        summary=news_data["summary"],
-        reason=news_data["reason"],
-    ))
-    session.commit()
-    session.close()
+    DBSession = Session()
+    DBSession.add(
+        NewsArticle(
+            url=news_data["url"],
+            title=news_data["title"],
+            time=news_data["time"],
+            content=" ".join(news_data["content"]),  # 將內容list轉換為字串
+            summary=news_data["summary"],
+            reason=news_data["reason"],
+        )
+    )
+    DBSession.commit()
+    DBSession.close()
 
 
-def get_new_info(search_term, is_initial=False):
+def fetch_news_list(search_term, is_initial=False):
     """
     get new
 
@@ -182,14 +182,15 @@ def get_new_info(search_term, is_initial=False):
         all_news_data = response.json()["lists"]
     return all_news_data
 
-def get_new(is_initial=False):
+
+def fetch_and_process_news(is_initial=False):
     """
     get new info
 
     :param is_initial:
     :return:
     """
-    news_data = get_new_info("價格", is_initial=is_initial)
+    news_data = fetch_news_list("價格", is_initial=is_initial)
     for news in news_data:
         title = news["title"]
         m = [
@@ -218,7 +219,7 @@ def get_new(is_initial=False):
                 for p in content_section.find_all("p")
                 if p.text.strip() != "" and "▪" not in p.text
             ]
-            detailed_news =  {
+            detailed_news = {
                 "url": news["titleLink"],
                 "title": title,
                 "time": time,
@@ -240,54 +241,48 @@ def get_new(is_initial=False):
             result = json.loads(result)
             detailed_news["summary"] = result["影響"]
             detailed_news["reason"] = result["原因"]
-            add_new(detailed_news)
+            add_article_to_db(detailed_news)
 
 
 @app.on_event("startup")
-def start_scheduler():
+def start_background_scheduler():
     db = SessionLocal()
     if db.query(NewsArticle).count() == 0:
         # should change into simple factory pattern
-        get_new()
+        fetch_and_process_news()
     db.close()
-    bgs.add_job(get_new, "interval", minutes=100)
-    bgs.start()
+    scheduler.add_job(fetch_and_process_news, "interval", minutes=100)
+    scheduler.start()
 
 
 @app.on_event("shutdown")
 def shutdown_scheduler():
-    bgs.shutdown()
+    scheduler.shutdown()
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
 
 
-def session_opener():
-    session = Session(bind=engine)
+def get_db_session():
+    DBSession = Session(bind=engine)
     try:
-        yield session
+        yield DBSession
     finally:
-        session.close()
+        DBSession.close()
 
-
-
-def verify(p1, p2):
+def verify_password(p1, p2):
     return pwd_context.verify(p1, p2)
 
-
-def check_user_password_is_correct(db, n, pwd):
-    OuO = db.query(User).filter(User.username == n).first()
-    if not verify(pwd, OuO.hashed_password):
+def verify_user_password(db, n, pwd):
+    user_record = db.query(User).filter(User.username == n).first()
+    if not verify_password(pwd, user_record.hashed_password):
         return False
-    return OuO
+    return user_record
 
 
-def authenticate_user_token(
-    token = Depends(oauth2_scheme),
-    db = Depends(session_opener)
-):
-    payload = jwt.decode(token, '1892dhianiandowqd0n', algorithms=["HS256"])
+def authenticate_user_token(token=Depends(oauth2_scheme), db=Depends(get_db_session)):
+    payload = jwt.decode(token, "1892dhianiandowqd0n", algorithms=["HS256"])
     return db.query(User).filter(User.username == payload.get("sub")).first()
 
 
@@ -300,26 +295,30 @@ def create_access_token(data, expires_delta=None):
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     print(to_encode)
-    encoded_jwt = jwt.encode(to_encode, '1892dhianiandowqd0n', algorithm="HS256")
+    encoded_jwt = jwt.encode(to_encode, "1892dhianiandowqd0n", algorithm="HS256")
     return encoded_jwt
 
 
 @app.post("/api/v1/users/login")
 async def login_for_access_token(
-        form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(session_opener)
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db_session),
 ):
     """login"""
-    user = check_user_password_is_correct(db, form_data.username, form_data.password)
+    user = verify_user_password(db, form_data.username, form_data.password)
     access_token = create_access_token(
         data={"sub": str(user.username)}, expires_delta=timedelta(minutes=30)
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 class UserAuthSchema(BaseModel):
     username: str
     password: str
+
+
 @app.post("/api/v1/users/register")
-def create_user(user: UserAuthSchema, db: Session = Depends(session_opener)):
+def create_user(user: UserAuthSchema, db: Session = Depends(get_db_session)):
     """create user"""
     hashed_password = pwd_context.hash(user.password)
     db_user = User(username=user.username, hashed_password=hashed_password)
@@ -346,16 +345,16 @@ def get_article_upvote_details(article_id, uid, db):
     voted = False
     if uid:
         voted = (
-                db.query(user_news_association_table)
-                .filter_by(news_articles_id=article_id, user_id=uid)
-                .first()
-                is not None
+            db.query(user_news_association_table)
+            .filter_by(news_articles_id=article_id, user_id=uid)
+            .first()
+            is not None
         )
     return cnt, voted
 
 
 @app.get("/api/v1/news/news")
-def read_news(db=Depends(session_opener)):
+def read_news(db=Depends(get_db_session)):
     """
     read new
 
@@ -366,19 +365,12 @@ def read_news(db=Depends(session_opener)):
     result = []
     for n in news:
         upvotes, upvoted = get_article_upvote_details(n.id, None, db)
-        result.append(
-            {**n.__dict__, "upvotes": upvotes, "is_upvoted": upvoted}
-        )
+        result.append({**n.__dict__, "upvotes": upvotes, "is_upvoted": upvoted})
     return result
 
 
-@app.get(
-    "/api/v1/news/user_news"
-)
-def read_user_news(
-        db=Depends(session_opener),
-        u=Depends(authenticate_user_token)
-):
+@app.get("/api/v1/news/user_news")
+def read_user_news(db=Depends(get_db_session), u=Depends(authenticate_user_token)):
     """
     read user new
 
@@ -399,8 +391,10 @@ def read_user_news(
         )
     return result
 
+
 class PromptRequest(BaseModel):
     prompt: str
+
 
 @app.post("/api/v1/news/search_news")
 async def search_news(request: PromptRequest):
@@ -420,7 +414,7 @@ async def search_news(request: PromptRequest):
     )
     keywords = completion.choices[0].message.content
     # should change into simple factory pattern
-    news_items = get_new_info(keywords, is_initial=False)
+    news_items = fetch_news_list(keywords, is_initial=False)
     for news in news_items:
         try:
             response = requests.get(news["titleLink"])
@@ -449,12 +443,14 @@ async def search_news(request: PromptRequest):
             print(e)
     return sorted(news_list, key=lambda x: x["time"], reverse=True)
 
+
 class NewsSumaryRequestSchema(BaseModel):
     content: str
 
+
 @app.post("/api/v1/news/news_summary")
 async def news_summary(
-        payload: NewsSumaryRequestSchema, u=Depends(authenticate_user_token)
+    payload: NewsSumaryRequestSchema, u=Depends(authenticate_user_token)
 ):
     response = {}
     m = [
@@ -479,9 +475,9 @@ async def news_summary(
 
 @app.post("/api/v1/news/{id}/upvote")
 def upvote_article(
-        id,
-        db=Depends(session_opener),
-        u=Depends(authenticate_user_token),
+    id,
+    db=Depends(get_db_session),
+    u=Depends(authenticate_user_token),
 ):
     message = toggle_upvote(id, u.id, db)
     return {"message": message}
@@ -517,9 +513,7 @@ def news_exists(id2, db: Session):
 
 
 @app.get("/api/v1/prices/necessities-price")
-def get_necessities_prices(
-        category=Query(None), commodity=Query(None)
-):
+def get_necessities_prices(category=Query(None), commodity=Query(None)):
     return requests.get(
         "https://opendata.ey.gov.tw/api/ConsumerProtection/NecessitiesPrice",
         params={"CategoryName": category, "Name": commodity},
