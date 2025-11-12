@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from typing import List, Optional
 import requests
 from fastapi import APIRouter, HTTPException, Query, Depends, status, FastAPI
-import os
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
