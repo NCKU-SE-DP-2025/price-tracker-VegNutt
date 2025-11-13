@@ -74,31 +74,31 @@ backend/app/
 
 ## Key Features
 
-✅ **Proper Separation of Concerns**
+**Proper Separation of Concerns**
 - Each module has a single responsibility
 - Easy to test, maintain, and extend
 
-✅ **Dependency Injection**
+**Dependency Injection**
 - Database sessions via `Depends(get_db_session)`
 - Current user via `Depends(get_current_user)`
 - Testable and flexible
 
-✅ **Type Safety**
+**Type Safety**
 - All functions have type hints
 - Pydantic schemas for validation
 - Better IDE autocomplete and error detection
 
-✅ **Clean API Structure**
+**Clean API Structure**
 - Routers organized by resource (users, news, prices)
 - Consistent endpoint naming
 - Proper HTTP status codes and error handling
 
-✅ **Security**
+**Security**
 - Password hashing with bcrypt
 - JWT token-based authentication
 - OAuth2 security scheme
 
-✅ **Scalability**
+**Scalability**
 - Easy to add new routes (create new file in `api/`)
 - Easy to add new services (add to `services/`)
 - Clean database layer for migrations
