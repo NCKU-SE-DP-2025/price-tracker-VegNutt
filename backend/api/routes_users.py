@@ -1,15 +1,15 @@
 from datetime import timedelta
-from typing import Generator
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.schemas import TokenResponse, UserCreate, UserResponse
-from app.api.security import create_access_token, get_current_user
-from app.core.config import settings
-from app.db.database import get_db_session
-from app.models import User
-from app.services import AuthService
+from api.schemas import TokenResponse, UserCreate, UserResponse
+from api.security import create_access_token, get_current_user
+from core.config import settings
+from db.database import get_db_session
+from models import User
+from services import AuthService
 
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
@@ -29,18 +29,11 @@ def register(user: UserCreate, db: Session = Depends(get_db_session)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    form_data: dict = Depends(lambda: {"username": "", "password": ""}),
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db_session),
 ):
     """Login and get access token."""
-    # Note: In production, use OAuth2PasswordRequestForm
-    from fastapi.security import OAuth2PasswordRequestForm
-    
-    # Placeholder - should receive form_data from OAuth2PasswordRequestForm
-    username = form_data.get("username", "")
-    password = form_data.get("password", "")
-    
-    user = AuthService.authenticate_user(db, username, password)
+    user = AuthService.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

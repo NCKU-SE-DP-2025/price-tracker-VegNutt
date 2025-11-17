@@ -13,9 +13,9 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 from urllib.parse import quote
 
-from app.core.config import settings
-from app.models import NewsArticle, User, user_news_association_table
-from app.api.security import hash_password, verify_password
+from core.config import settings
+from models import NewsArticle, User, user_news_association_table
+from api.security import hash_password, verify_password
 
 
 class AuthService:

@@ -3,17 +3,17 @@ from typing import List, cast
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.schemas import (
+from api.schemas import (
     NewsArticleResponse,
     NewsSummaryRequest,
     NewsSummaryResponse,
     PromptRequest,
     UpvoteResponse,
 )
-from app.api.security import get_current_user
-from app.db.database import get_db_session
-from app.models import NewsArticle, User
-from app.services import NewsService, UpvoteService
+from api.security import get_current_user
+from db.database import get_db_session
+from models import NewsArticle, User
+from services import NewsService, UpvoteService
 
 
 router = APIRouter(prefix="/api/v1/news", tags=["news"])
@@ -21,7 +21,6 @@ router = APIRouter(prefix="/api/v1/news", tags=["news"])
 
 @router.get("/news", response_model=List[NewsArticleResponse])
 def get_all_news(db: Session = Depends(get_db_session)):
-    """Get all news articles."""
     service = NewsService(db)
     return service.get_all_news()
 
@@ -31,7 +30,6 @@ def get_user_news_articles(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    """Get news articles with user's upvote status."""
     service = NewsService(db)
     user_id = cast(int, current_user.id)
     return service.get_user_news(user_id)

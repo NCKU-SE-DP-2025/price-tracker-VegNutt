@@ -1,8 +1,3 @@
-# FastAPI Project Structure
-
-## Overview
-Your FastAPI application has been refactored to follow best practices with proper separation of concerns.
-
 ## Project Structure
 
 ```
@@ -72,47 +67,6 @@ backend/app/
 - Manages background scheduler for news fetching
 - Health check endpoint
 
-## Key Features
-
-**Proper Separation of Concerns**
-- Each module has a single responsibility
-- Easy to test, maintain, and extend
-
-**Dependency Injection**
-- Database sessions via `Depends(get_db_session)`
-- Current user via `Depends(get_current_user)`
-- Testable and flexible
-
-**Type Safety**
-- All functions have type hints
-- Pydantic schemas for validation
-- Better IDE autocomplete and error detection
-
-**Clean API Structure**
-- Routers organized by resource (users, news, prices)
-- Consistent endpoint naming
-- Proper HTTP status codes and error handling
-
-**Security**
-- Password hashing with bcrypt
-- JWT token-based authentication
-- OAuth2 security scheme
-
-**Scalability**
-- Easy to add new routes (create new file in `api/`)
-- Easy to add new services (add to `services/`)
-- Clean database layer for migrations
-
-## Running the Application
-
-```bash
-# Development
-uvicorn app.main:app --reload --port 8000
-
-# Production
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app
-```
-
 ## API Endpoints
 
 ### Users (`/api/v1/users`)
@@ -142,11 +96,3 @@ SECRET_KEY=your-secret-key
 OPENAI_API_KEY=your-openai-key
 SENTRY_DSN=your-sentry-dsn
 ```
-
-## Next Steps
-
-1. **Run tests**: `pytest tests/`
-2. **Add more services**: Create new files in `services/`
-3. **Add more routes**: Create new files in `api/`
-4. **Database migrations**: Use Alembic with the existing setup
-5. **API documentation**: Automatically available at `/docs` (Swagger UI) and `/redoc` (ReDoc)

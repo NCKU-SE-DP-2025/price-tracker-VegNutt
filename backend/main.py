@@ -5,12 +5,24 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_news, routes_prices, routes_users
-from app.core.config import settings
-from app.db.database import Base, engine, SessionLocal
-from app.services import NewsService
+from api import routes_news, routes_prices, routes_users
+from api.schemas import NewsSummaryRequest, PromptRequest
+from api.security import hash_password, verify_password, create_access_token
+from core.config import settings
+from db.database import Base, engine, SessionLocal, get_db_session
+from services import NewsService
 # Import models to register them with Base
-from app.models import NewsArticle, User
+from models import NewsArticle, User, user_news_association_table
+
+# Export for testing
+pwd_context = None  # Will be set from security module
+session_opener = get_db_session
+
+try:
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+except Exception:
+    pass
 
 sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=1.0)
 Base.metadata.create_all(engine)
@@ -24,7 +36,7 @@ def start_scheduler():
         news_service = NewsService(db)
         
         # Fetch initial news if database is empty
-        from app.models import NewsArticle
+        from models import NewsArticle
         if db.query(NewsArticle).count() == 0:
             news_service.fetch_and_process_news(is_initial=True)
         
