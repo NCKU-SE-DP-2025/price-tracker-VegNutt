@@ -21,7 +21,6 @@ router = APIRouter(prefix="/api/v1/news", tags=["news"])
 
 @router.get("/news", response_model=List[NewsArticleResponse])
 def get_all_news(db: Session = Depends(get_db_session)):
-    """Get all news articles."""
     service = NewsService(db)
     return service.get_all_news()
 
@@ -31,7 +30,6 @@ def get_user_news_articles(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    """Get news articles with user's upvote status."""
     service = NewsService(db)
     user_id = cast(int, current_user.id)
     return service.get_user_news(user_id)
@@ -52,7 +50,6 @@ def summarize_news(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    """Generate summary for news content."""
     service = NewsService(db)
     summary_data = service._generate_summary([request.content])
     return summary_data
@@ -64,7 +61,6 @@ def upvote_article(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    """Toggle upvote on an article."""
     # Verify article exists
     article = db.query(NewsArticle).filter_by(id=article_id).first()
     if not article:

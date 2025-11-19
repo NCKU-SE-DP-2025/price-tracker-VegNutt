@@ -18,7 +18,6 @@ user_news_association_table = Table(
 
 
 class User(Base):
-    """User model."""
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -32,7 +31,6 @@ class User(Base):
 
 
 class NewsArticle(Base):
-    """News article model."""
     __tablename__ = "news_articles"
     
     id = Column(Integer, primary_key=True, autoincrement=True)

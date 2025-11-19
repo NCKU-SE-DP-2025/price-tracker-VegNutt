@@ -17,7 +17,6 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user: UserCreate, db: Session = Depends(get_db_session)):
-    """Register a new user."""
     existing_user = db.query(User).filter(User.username == user.username).first()
     if existing_user:
         raise HTTPException(
@@ -32,7 +31,6 @@ def login(
     form_data: dict = Depends(lambda: {"username": "", "password": ""}),
     db: Session = Depends(get_db_session),
 ):
-    """Login and get access token."""
     # Note: In production, use OAuth2PasswordRequestForm
     from fastapi.security import OAuth2PasswordRequestForm
     
@@ -56,5 +54,4 @@ def login(
 
 @router.get("/me", response_model=UserResponse)
 def get_user_me(current_user: User = Depends(get_current_user)):
-    """Get current user information."""
     return current_user

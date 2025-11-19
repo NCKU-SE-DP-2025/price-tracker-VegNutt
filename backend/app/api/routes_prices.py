@@ -13,7 +13,6 @@ def get_necessities_prices(
     category: Optional[str] = Query(None),
     commodity: Optional[str] = Query(None),
 ):
-    """Get necessities price data from external API."""
     try:
         response = requests.get(
             "https://opendata.ey.gov.tw/api/ConsumerProtection/NecessitiesPrice",
