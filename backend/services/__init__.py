@@ -1,7 +1,3 @@
-"""
-Service layer for business logic.
-"""
-
 import json
 from typing import List, Optional, cast
 
@@ -23,7 +19,6 @@ class AuthService:
     
     @staticmethod
     def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
-        """Authenticate user by username and password."""
         user = db.query(User).filter(User.username == username).first()
         if not user or not verify_password(password, cast(str, user.hashed_password)):
             return None
@@ -31,7 +26,6 @@ class AuthService:
     
     @staticmethod
     def create_user(db: Session, username: str, password: str) -> User:
-        """Create a new user."""
         hashed_pwd = hash_password(password)
         user = User(username=username, hashed_password=hashed_pwd)
         db.add(user)
@@ -41,14 +35,11 @@ class AuthService:
 
 
 class NewsService:
-    """News service for fetching, processing, and managing news articles."""
-    
     def __init__(self, db: Session):
         self.db = db
         self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
     
     def _fetch_remote_news(self, search_term: str, is_initial: bool = False) -> List[dict]:
-        """Fetch news from remote API."""
         all_news = []
         pages_range = range(1, settings.NEWS_FETCH_PAGES) if is_initial else range(1, 2)
         
@@ -91,7 +82,6 @@ class NewsService:
             return "low"
     
     def _scrape_article_details(self, url: str) -> dict:
-        """Scrape detailed article information from URL."""
         try:
             response = requests.get(url, timeout=10)
             response.raise_for_status()
@@ -121,7 +111,6 @@ class NewsService:
             return {"title": "", "time": "", "content": []}
     
     def _generate_summary(self, content: List[str]) -> dict:
-        """Generate summary and reason using OpenAI."""
         try:
             messages = [
                 {
@@ -148,7 +137,6 @@ class NewsService:
             return {"summary": "", "reason": ""}
     
     def fetch_and_process_news(self, is_initial: bool = False) -> None:
-        """Fetch and process news articles."""
         try:
             news_list = self._fetch_remote_news("價格", is_initial=is_initial)
             
@@ -272,7 +260,6 @@ class NewsService:
 
 
 class UpvoteService:
-    """Service for managing article upvotes."""
     
     def __init__(self, db: Session):
         self.db = db

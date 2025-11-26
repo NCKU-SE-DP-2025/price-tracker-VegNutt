@@ -50,7 +50,6 @@ def summarize_news(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    """Generate summary for news content."""
     service = NewsService(db)
     summary_data = service._generate_summary([request.content])
     return summary_data
@@ -62,7 +61,6 @@ def upvote_article(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    """Toggle upvote on an article."""
     # Verify article exists
     article = db.query(NewsArticle).filter_by(id=article_id).first()
     if not article:
