@@ -5,7 +5,7 @@ SQLAlchemy models for the application.
 from sqlalchemy import Column, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from db.database import Base
 
 
 # Association table for many-to-many relationship between User and NewsArticle

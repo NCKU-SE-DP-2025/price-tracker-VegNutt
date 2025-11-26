@@ -2,13 +2,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, StaticPool
 from sqlalchemy.orm import sessionmaker
-from main import app
-from main import Base, User, session_opener
+from main import app, Base, User, session_opener, pwd_context
 from jose import jwt
-from main import pwd_context
+from core.config import settings
 
-SECRET_KEY = "1892dhianiandowqd0n"
-ALGORITHM = "HS256"
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
 # SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(
@@ -23,11 +22,13 @@ Base.metadata.create_all(bind=engine)
 
 
 def override_session_opener():
+    db = None
     try:
         db = TestingSessionLocal()
         yield db
     finally:
-        db.close()
+        if db:
+            db.close()
 
 
 app.dependency_overrides[session_opener] = override_session_opener
@@ -35,15 +36,21 @@ app.dependency_overrides[session_opener] = override_session_opener
 client = TestClient(app)
 
 
-@pytest.fixture(scope="module")
-def clear_users():
+@pytest.fixture(scope="function", autouse=True)
+def clear_db():
+    """Clear database before each test."""
+    with next(override_session_opener()) as db:
+        db.query(User).delete()
+        db.commit()
+    yield
+    # Cleanup after test
     with next(override_session_opener()) as db:
         db.query(User).delete()
         db.commit()
 
 
-@pytest.fixture(scope="module")
-def test_user(clear_users):
+@pytest.fixture(scope="function")
+def test_user(clear_db):
     hashed_password = pwd_context.hash("testpassword")
 
     with next(override_session_opener()) as db:
@@ -54,7 +61,7 @@ def test_user(clear_users):
         return user
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def test_token(test_user):
     access_token = jwt.encode(
         {"sub": test_user.username}, SECRET_KEY, algorithm=ALGORITHM
@@ -68,7 +75,7 @@ def test_register_user():
         json={"username": "newuser", "password": "newpassword"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
     assert data["username"] == "newuser"
 

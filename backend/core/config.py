@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import List
 
@@ -26,6 +27,18 @@ class Settings:
     # News fetching
     NEWS_FETCH_INTERVAL_MINUTES: int = 100
     NEWS_FETCH_PAGES: int = 10
+    
+    # Logging
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
 settings = Settings()
+
+
+def configure_logging():
+    """Configure logging with level and format from settings."""
+    logging.basicConfig(
+        level=getattr(logging, settings.LOG_LEVEL.upper()),
+        format=settings.LOG_FORMAT,
+    )

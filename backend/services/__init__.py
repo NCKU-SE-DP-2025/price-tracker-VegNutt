@@ -5,13 +5,13 @@ import requests
 import sentry_sdk
 from bs4 import BeautifulSoup
 from openai import OpenAI
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, func
 from sqlalchemy.orm import Session
 from urllib.parse import quote
 
-from app.core.config import settings
-from app.models import NewsArticle, User, user_news_association_table
-from app.api.security import hash_password, verify_password
+from core.config import settings
+from models import NewsArticle, User, user_news_association_table
+from api.security import hash_password, verify_password
 
 
 class AuthService:
@@ -182,13 +182,26 @@ class NewsService:
             self.db.rollback()
     
     def get_all_news(self) -> List[dict]:
-        """Get all news articles with upvote counts."""
-        articles = self.db.query(NewsArticle).order_by(NewsArticle.time.desc()).all()
+        """Get all news articles with upvote counts.
+        
+        Optimized to use single aggregated query instead of N+1 queries.
+        Uses LEFT OUTER JOIN to count upvotes without looping through articles.
+        """
+        # Single optimized query with aggregation
+        query = self.db.query(
+            NewsArticle,
+            func.count(user_news_association_table.c.user_id).label("upvote_count")
+        ).outerjoin(
+            user_news_association_table,
+            NewsArticle.id == user_news_association_table.c.news_articles_id
+        ).group_by(
+            NewsArticle.id
+        ).order_by(
+            NewsArticle.time.desc()
+        )
+        
         result = []
-        for article in articles:
-            upvote_count = self.db.query(user_news_association_table).filter_by(
-                news_articles_id=article.id
-            ).count()
+        for article, upvote_count in query.all():
             result.append({
                 "id": article.id,
                 "url": article.url,
@@ -197,22 +210,41 @@ class NewsService:
                 "content": article.content,
                 "summary": article.summary,
                 "reason": article.reason,
-                "upvotes": upvote_count,
+                "upvotes": upvote_count or 0,
                 "is_upvoted": False,
             })
         return result
     
     def get_user_news(self, user_id: int) -> List[dict]:
-        """Get all news with upvote status for specific user."""
-        articles = self.db.query(NewsArticle).order_by(NewsArticle.time.desc()).all()
+        """Get all news with upvote status for specific user.
+        
+        Optimized to use 2 queries instead of N+2 queries:
+        1. Get all articles with upvote counts (single aggregated query)
+        2. Get upvoted article IDs by user (single subquery)
+        """
+        # Query 1: Get all articles with upvote counts
+        articles_query = self.db.query(
+            NewsArticle,
+            func.count(user_news_association_table.c.user_id).label("upvote_count")
+        ).outerjoin(
+            user_news_association_table,
+            NewsArticle.id == user_news_association_table.c.news_articles_id
+        ).group_by(
+            NewsArticle.id
+        ).order_by(
+            NewsArticle.time.desc()
+        )
+        
+        # Query 2: Get set of article IDs upvoted by this user (for fast lookup)
+        upvoted_ids = set(
+            self.db.query(user_news_association_table.c.news_articles_id).filter_by(
+                user_id=user_id
+            ).all()
+        )
+        upvoted_ids = {row[0] for row in upvoted_ids}  # Convert tuples to set of IDs
+        
         result = []
-        for article in articles:
-            upvote_count = self.db.query(user_news_association_table).filter_by(
-                news_articles_id=article.id
-            ).count()
-            is_upvoted = self.db.query(user_news_association_table).filter_by(
-                news_articles_id=article.id, user_id=user_id
-            ).first() is not None
+        for article, upvote_count in articles_query.all():
             result.append({
                 "id": article.id,
                 "url": article.url,
@@ -221,8 +253,8 @@ class NewsService:
                 "content": article.content,
                 "summary": article.summary,
                 "reason": article.reason,
-                "upvotes": upvote_count,
-                "is_upvoted": is_upvoted,
+                "upvotes": upvote_count or 0,
+                "is_upvoted": article.id in upvoted_ids,
             })
         return result
 

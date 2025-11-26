@@ -3,17 +3,17 @@ from typing import List, cast
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.schemas import (
+from api.schemas import (
     NewsArticleResponse,
     NewsSummaryRequest,
     NewsSummaryResponse,
     PromptRequest,
     UpvoteResponse,
 )
-from app.api.security import get_current_user
-from app.db.database import get_db_session
-from app.models import NewsArticle, User
-from app.services import NewsService, UpvoteService
+from api.security import get_current_user
+from db.database import get_db_session
+from models import NewsArticle, User
+from services import NewsService, UpvoteService
 
 
 router = APIRouter(prefix="/api/v1/news", tags=["news"])
