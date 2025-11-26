@@ -1,18 +1,20 @@
 from contextlib import asynccontextmanager
 
 import sentry_sdk
-from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import routes_news, routes_prices, routes_users
 from api.schemas import NewsSummaryRequest, PromptRequest
 from api.security import hash_password, verify_password, create_access_token
-from core.config import settings
+from core.config import settings, configure_logging
+from core.scheduler import SchedulerManager
 from db.database import Base, engine, SessionLocal, get_db_session
-from services import NewsService
 # Import models to register them with Base
 from models import NewsArticle, User, user_news_association_table
+
+# Configure logging first
+configure_logging()
 
 # Export for testing
 pwd_context = None  # Will be set from security module
@@ -26,50 +28,19 @@ except Exception:
 
 sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=1.0)
 Base.metadata.create_all(engine)
-scheduler = BackgroundScheduler()
-
-
-def start_scheduler():
-    """Start background scheduler for periodic tasks."""
-    try:
-        db = SessionLocal()
-        news_service = NewsService(db)
-        
-        # Fetch initial news if database is empty
-        from models import NewsArticle
-        if db.query(NewsArticle).count() == 0:
-            news_service.fetch_and_process_news(is_initial=True)
-        
-        db.close()
-    except Exception as e:
-        sentry_sdk.capture_exception(e)
-    
-    # Schedule periodic news fetching
-    scheduler.add_job(
-        lambda: NewsService(SessionLocal()).fetch_and_process_news(),
-        "interval",
-        minutes=settings.NEWS_FETCH_INTERVAL_MINUTES,
-    )
-    scheduler.start()
-
-
-def stop_scheduler():
-    """Stop background scheduler."""
-    if scheduler.running:
-        scheduler.shutdown()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
-    start_scheduler()
+    scheduler_manager = SchedulerManager.get_instance()
+    scheduler_manager.start()
     yield
     # Shutdown
-    stop_scheduler()
+    scheduler_manager.stop()
 
 
-# Create FastAPI application
 app = FastAPI(
     title="Price Tracker API",
     description="API for tracking price-related news articles",
@@ -86,7 +57,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(routes_users.router)
 app.include_router(routes_news.router)  
 app.include_router(routes_prices.router)
