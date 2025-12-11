@@ -1,15 +1,17 @@
 """UDN News Crawler implementation."""
 
+import json
 import logging
 from typing import List, Dict, Any, Optional
 
 import requests
 from bs4 import BeautifulSoup
+from openai import OpenAI
 from urllib.parse import quote
 
 from core.config import settings
 from src.crawler.crawler_base import BaseCrawler
-from src.crawler.exceptions import FetchException, ParseException
+from src.crawler.exceptions import FetchException, ParseException, AnalysisException
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ class UDNCrawler(BaseCrawler):
         """
         super().__init__(timeout)
         self.pages = pages
+        self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
     
     def fetch_data(self, **kwargs) -> List[Dict[str, Any]]:
         """Fetch news from UDN API.
@@ -157,3 +160,85 @@ class UDNCrawler(BaseCrawler):
             article.get("url") and 
             article.get("content")
         )
+    
+    def evaluate_relevance(self, title: str) -> str:
+        """Use OpenAI to evaluate if news is relevant to price changes.
+        
+        Args:
+            title: Article title to evaluate
+            
+        Returns:
+            Relevance score: 'high', 'medium', or 'low'
+            
+        Raises:
+            AnalysisException: If evaluation fails
+        """
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": "你是一個關聯度評估機器人，請評估新聞標題是否與「民生用品的價格變化」相關，並給予'high'、'medium'、'low'評價。(僅需回答'high'、'medium'、'low'三個詞之一)",
+                },
+                {"role": "user", "content": title},
+            ]
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,  # type: ignore
+                temperature=0.7,
+            )
+            content = response.choices[0].message.content
+            result = content.strip() if content else "low"
+            
+            logger.debug(f"Evaluated relevance for '{title}': {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to evaluate relevance for '{title}': {e}")
+            raise AnalysisException(f"Failed to evaluate article relevance: {str(e)}")
+    
+    def generate_summary(self, content: List[str]) -> Dict[str, str]:
+        """Generate summary and reason using OpenAI.
+        
+        Args:
+            content: List of article content paragraphs
+            
+        Returns:
+            Dictionary with 'summary' and 'reason' keys
+            
+        Raises:
+            AnalysisException: If summary generation fails
+        """
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": "你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})",
+                },
+                {"role": "user", "content": " ".join(content)},
+            ]
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,  # type: ignore
+                temperature=0.7,
+            )
+            result_text = response.choices[0].message.content
+            
+            if result_text is None:
+                logger.warning("Empty response from OpenAI for summary generation")
+                return {"summary": "", "reason": ""}
+            
+            parsed = json.loads(result_text)
+            summary_data = {
+                "summary": parsed.get("影響", ""),
+                "reason": parsed.get("原因", ""),
+            }
+            
+            logger.debug("Successfully generated summary and reason")
+            return summary_data
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+            raise AnalysisException(f"Invalid summary format from OpenAI: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to generate summary: {e}")
+            raise AnalysisException(f"Failed to generate news summary: {str(e)}")

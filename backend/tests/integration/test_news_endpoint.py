@@ -147,24 +147,18 @@ def mock_openai(mocker, return_content):
 def test_search_news(mocker):
     mock_openai(mocker, "keywords")
 
-    mock_get_new_info = mocker.patch(
-        "services.NewsService._fetch_remote_news", return_value=[{"titleLink": "http://example.com/news1"}]
-    )
-
-    mock_get = mocker.patch(
-        "services.requests.get",
-        return_value=mocker.Mock(
-            text="""
-        <html>
-        <h1 class="article-content__title">Test Title</h1>
-        <time class="article-content__time">2024-09-10</time>
-        <section class="article-content__editor">
-            <p>This is a test paragraph.</p>
-        </section>
-        </html>
-        """
-        ),
-    )
+    # Mock UDNCrawler instead of NewsService._fetch_remote_news
+    mock_crawler = mocker.Mock()
+    mock_crawler.fetch_data.return_value = [{"titleLink": "http://example.com/news1", "title": "Test News"}]
+    mock_crawler.evaluate_relevance.return_value = "high"
+    mock_crawler.scrape_article_details.return_value = {
+        "title": "Test Title",
+        "time": "2024-09-10",
+        "content": ["This is a test paragraph."]
+    }
+    mock_crawler.generate_summary.return_value = {"summary": "test impact", "reason": "test reason"}
+    
+    mocker.patch("services.UDNCrawler", return_value=mock_crawler)
 
     request_body = {"prompt": "Test search prompt"}
 
@@ -181,6 +175,11 @@ def test_news_summary(mocker, test_token):
     headers = {"Authorization": f"Bearer {test_token}"}
     openai_response = json.dumps({"影響": "test impact", "原因": "test reason"})
     mock_openai(mocker, openai_response)
+    
+    # Mock UDNCrawler for the summarize_news endpoint
+    mock_crawler = mocker.Mock()
+    mock_crawler.generate_summary.return_value = {"summary": "test impact", "reason": "test reason"}
+    mocker.patch("api.routes_news.UDNCrawler", return_value=mock_crawler)
 
     request_body = NewsSummaryRequest(content="Test news content")
     response = client.post(
