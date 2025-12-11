@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import List, Optional, cast
 
 import requests
@@ -12,6 +13,11 @@ from urllib.parse import quote
 from core.config import settings
 from models import NewsArticle, User, user_news_association_table
 from api.security import hash_password, verify_password
+from src.crawler.udn_crawler import UDNCrawler
+from src.crawler.exceptions import CrawlerException, AnalysisException
+
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -37,110 +43,20 @@ class AuthService:
 class NewsService:
     def __init__(self, db: Session):
         self.db = db
-        self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    
-    def _fetch_remote_news(self, search_term: str, is_initial: bool = False) -> List[dict]:
-        all_news = []
-        pages_range = range(1, settings.NEWS_FETCH_PAGES) if is_initial else range(1, 2)
-        
-        for page in pages_range:
-            params = {
-                "page": page,
-                "id": f"search:{quote(search_term)}",
-                "channelId": 2,
-                "type": "searchword",
-            }
-            try:
-                response = requests.get("https://udn.com/api/more", params=params, timeout=10)
-                response.raise_for_status()
-                all_news.extend(response.json().get("lists", []))
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
-                continue
-        
-        return all_news
-    
-    def _evaluate_relevance(self, title: str) -> str:
-        """Use OpenAI to evaluate if news is relevant to price changes."""
-        try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": "你是一個關聯度評估機器人，請評估新聞標題是否與「民生用品的價格變化」相關，並給予'high'、'medium'、'low'評價。(僅需回答'high'、'medium'、'low'三個詞之一)",
-                },
-                {"role": "user", "content": title},
-            ]
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,  # type: ignore
-                temperature=0.7,
-            )
-            content = response.choices[0].message.content
-            return content.strip() if content else "low"
-        except Exception as e:
-            sentry_sdk.capture_exception(e)
-            return "low"
-    
-    def _scrape_article_details(self, url: str) -> dict:
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
-            
-            title_el = soup.find("h1", class_="article-content__title")
-            time_el = soup.find("time", class_="article-content__time")
-            content_section = soup.find("section", class_="article-content__editor")
-            
-            title = title_el.text if title_el else "Unknown"
-            time = time_el.text if time_el else ""
-            
-            paragraphs = []
-            if content_section:
-                for p in content_section.find_all("p"):
-                    text = p.text.strip()
-                    if text and "▪" not in text:
-                        paragraphs.append(text)
-            
-            return {
-                "title": title,
-                "time": time,
-                "content": paragraphs,
-            }
-        except Exception as e:
-            sentry_sdk.capture_exception(e)
-            return {"title": "", "time": "", "content": []}
-    
-    def _generate_summary(self, content: List[str]) -> dict:
-        try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": "你是一個新聞摘要生成機器人，請統整新聞中提及的影響及主要原因 (影響、原因各50個字，請以json格式回答 {'影響': '...', '原因': '...'})",
-                },
-                {"role": "user", "content": " ".join(content)},
-            ]
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,  # type: ignore
-                temperature=0.7,
-            )
-            result_text = response.choices[0].message.content
-            if result_text is None:
-                return {"summary": "", "reason": ""}
-            parsed = json.loads(result_text)
-            return {
-                "summary": parsed.get("影響", ""),
-                "reason": parsed.get("原因", ""),
-            }
-        except Exception as e:
-            sentry_sdk.capture_exception(e)
-            return {"summary": "", "reason": ""}
     
     def fetch_and_process_news(self, is_initial: bool = False) -> None:
+        """Fetch and process news from UDN using the crawler.
+        
+        Uses UDNCrawler to fetch articles and process them through
+        relevance evaluation and summary generation pipeline.
+        """
         try:
-            news_list = self._fetch_remote_news("價格", is_initial=is_initial)
+            crawler = UDNCrawler()
             
-            for news in news_list:
+            # Fetch articles from UDN
+            all_news = crawler.fetch_data(search_term="價格", is_initial=is_initial)
+            
+            for news in all_news:
                 title = news.get("title", "")
                 url = news.get("titleLink", "")
                 
@@ -152,33 +68,50 @@ class NewsService:
                 if existing:
                     continue
                 
-                # Evaluate relevance
-                relevance = self._evaluate_relevance(title)
+                # Evaluate relevance using crawler
+                try:
+                    relevance = crawler.evaluate_relevance(title)
+                except AnalysisException as e:
+                    logger.error(f"Failed to evaluate relevance: {e}")
+                    continue
+                
                 if relevance != "high":
                     continue
                 
-                # Scrape details
-                details = self._scrape_article_details(url)
-                if not details["content"]:
+                # Scrape article details using crawler
+                try:
+                    details = crawler.scrape_article_details(url)
+                except CrawlerException as e:
+                    logger.error(f"Failed to scrape article details: {e}")
                     continue
                 
-                # Generate summary
-                summary_data = self._generate_summary(details["content"])
+                if not details.get("content"):
+                    continue
+                
+                # Generate summary using crawler
+                try:
+                    summary_data = crawler.generate_summary(details.get("content", []))
+                except AnalysisException as e:
+                    logger.error(f"Failed to generate summary: {e}")
+                    summary_data = {"summary": "", "reason": ""}
                 
                 # Save to database
                 article = NewsArticle(
                     url=url,
-                    title=details["title"],
-                    time=details["time"],
-                    content=" ".join(details["content"]),
-                    summary=summary_data["summary"],
-                    reason=summary_data["reason"],
+                    title=details.get("title", ""),
+                    time=details.get("time", ""),
+                    content=" ".join(details.get("content", [])),
+                    summary=summary_data.get("summary", ""),
+                    reason=summary_data.get("reason", ""),
                 )
                 self.db.add(article)
                 self.db.commit()
         
+        except CrawlerException as e:
+            logger.error(f"Crawler error during news processing: {e}")
+            self.db.rollback()
         except Exception as e:
-            sentry_sdk.capture_exception(e)
+            logger.exception(f"Unexpected error during news processing: {e}")
             self.db.rollback()
     
     def get_all_news(self) -> List[dict]:

@@ -3,3 +3,4 @@ __pycache__
 .env
 venv/
 *.db
+backend/src/crawler/USAGE.md

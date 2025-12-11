@@ -1,4 +1,5 @@
 from typing import List, cast
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -14,8 +15,11 @@ from api.security import get_current_user
 from db.database import get_db_session
 from models import NewsArticle, User
 from services import NewsService, UpvoteService
+from src.crawler.udn_crawler import UDNCrawler
+from src.crawler.exceptions import AnalysisException
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/news", tags=["news"])
 
 
@@ -50,9 +54,23 @@ def summarize_news(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    service = NewsService(db)
-    summary_data = service._generate_summary([request.content])
-    return summary_data
+    """Generate summary for news content using UDNCrawler."""
+    try:
+        crawler = UDNCrawler()
+        summary_data = crawler.generate_summary([request.content])
+        return summary_data
+    except AnalysisException as e:
+        logger.error(f"Failed to generate summary: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate summary"
+        )
+    except Exception as e:
+        logger.exception(f"Unexpected error in summarize_news: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
 
 
 @router.post("/{article_id}/upvote", response_model=UpvoteResponse)
